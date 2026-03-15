@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from config.rest_framework import *
 from config.drf_spectacular import *
+from config.jazzmin import *
 
 load_dotenv()
 
@@ -11,6 +12,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 SECRET_KEY = os.getenv('SECRET_KEY')
+
+AUTH_USER_MODEL = 'users.User'
 
 DEBUG = True
 
@@ -28,6 +31,7 @@ THIRD_PARTY_APPS = [
 ]
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -115,4 +119,4 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'static'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
