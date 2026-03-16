@@ -69,6 +69,10 @@ export const authService = {
   },
   
   isAuthenticated: () => !!localStorage.getItem('access_token'),
+
+  getUserProfile: async () => {
+    return await apiFetch('/users/me/');
+  }
 };
 
 // Todo Service
@@ -77,10 +81,15 @@ export const todoService = {
     return await apiFetch('/todos/');
   },
   
-  createTodo: async (title, description = '') => {
+  createTodo: async (title, description = '', category_id = null) => {
+    const body = { title, description };
+    // If the user selects a category, include it
+    if (category_id) {
+        body.category = category_id;
+    }
     return await apiFetch('/todos/', {
       method: 'POST',
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify(body),
     });
   },
   
@@ -93,6 +102,26 @@ export const todoService = {
   
   deleteTodo: async (id) => {
     return await apiFetch(`/todos/${id}/`, {
+      method: 'DELETE',
+    });
+  }
+};
+
+// Category Service
+export const categoryService = {
+  getCategories: async () => {
+    return await apiFetch('/categories/');
+  },
+  
+  createCategory: async (title) => {
+    return await apiFetch('/categories/', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    });
+  },
+
+  deleteCategory: async (id) => {
+    return await apiFetch(`/categories/${id}/`, {
       method: 'DELETE',
     });
   }

@@ -1,15 +1,6 @@
 # ========================
-# 🎨 JAZZMIN CONFIG — Cook Service
+# 🎨 JAZZMIN CONFIG — Todo App
 # ========================
-
-# JAZZMIN_UI_TWEAKS = {
-#     "theme": "flatly",            # Bosh tema (Bootstrap varianti)
-#     "navbar": "navbar-dark",      # Yuqori panel qoramtir
-#     "sidebar": "dark",            # Chap menyu qoramtir
-#     "dark_mode_theme": "slate",   # Tungi rejimda ishlatiladigan tema
-#     "footer_fixed": True,
-#     "actions_sticky_top": True,
-# }
 
 JAZZMIN_SETTINGS = {
     # --- Asosiy ma’lumotlar ---
@@ -53,6 +44,7 @@ JAZZMIN_SETTINGS = {
     "icons": {
         "users.User": "fas fa-users",
         "todo.Todo": "fas fa-tasks",
+        "todo.Category": "fas fa-list",
     },
     "default_icon_parents": "fas fa-folder",
     "default_icon_children": "fas fa-circle",
