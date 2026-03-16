@@ -84,10 +84,13 @@ export const authService = {
 
 // Todo Service
 export const todoService = {
-  getTodos: async (page = 1, search = '') => {
+  getTodos: async (page = 1, search = '', categoryId = null) => {
     let url = `/todos/?page=${page}`;
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;
+    }
+    if (categoryId) {
+      url += `&category=${categoryId}`;
     }
     return await apiFetch(url);
   },
@@ -125,6 +128,18 @@ export const todoService = {
   
   getActivity: async (period = '7d') => {
     return await apiFetch(`/todos/activity/?period=${period}`);
+  },
+
+  archiveTodo: async (id) => {
+    return await apiFetch(`/todos/${id}/archive/`, { method: 'POST' });
+  },
+
+  unarchiveTodo: async (id) => {
+    return await apiFetch(`/todos/${id}/unarchive/`, { method: 'POST' });
+  },
+
+  getArchivedTodos: async (page = 1) => {
+    return await apiFetch(`/todos/archived/?page=${page}`);
   }
 };
 

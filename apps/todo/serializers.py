@@ -11,8 +11,8 @@ class CategorySerializer(serializers.ModelSerializer):
 class TodoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Todo
-        fields = ('id', 'title', 'user', 'category', 'description', 'is_completed', 'deadline', 'priority', 'created_at', 'updated_at')
-        read_only_fields = ('created_at', 'updated_at', 'user')
+        fields = ('id', 'title', 'user', 'category', 'description', 'is_completed', 'deadline', 'priority', 'is_archived', 'archived_at', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at', 'user', 'archived_at')
 
     def validate_title(self, value):
         if len(value) < 3:

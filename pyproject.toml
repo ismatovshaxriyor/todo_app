@@ -15,6 +15,7 @@ dependencies = [
     "dotenv (>=0.9.9,<0.10.0)",
     "django-jazzmin (==3.0.1)",
     "django-cors-headers (>=4.9.0,<5.0.0)",
+    "django-filter (>=25.2,<26.0)",
 ]
 
 

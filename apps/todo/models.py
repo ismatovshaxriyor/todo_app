@@ -28,6 +28,8 @@ class Todo(models.Model):
     is_completed = models.BooleanField(default=False)
     deadline = models.DateTimeField(null=True, blank=True)
     priority = models.CharField(max_length=10, choices=PriorityChoices.choices, default=PriorityChoices.MEDIUM, null=True, blank=True)
+    is_archived = models.BooleanField(default=False)
+    archived_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
