@@ -1452,8 +1452,10 @@
         "options",
         "head",
       ];
-      const FAVORITES_STORAGE_KEY = "swagger_ui_favorites_v1";
-      const AUTH_TOKEN_STORAGE_KEY = "swagger_ui_last_bearer_token_v1";
+      // Generate unique storage keys based on the schema URL to avoid cross-project conflicts
+      const STORAGE_PREFIX = `swagger_ui_${btoa(SCHEMA_URL).replace(/[/+=]/g, '')}_v1`;
+      const FAVORITES_STORAGE_KEY = `${STORAGE_PREFIX}_favorites`;
+      const AUTH_TOKEN_STORAGE_KEY = `${STORAGE_PREFIX}_auth_token`;
       const COPY_EXACT_KEYS = [
         "access",
         "refresh",

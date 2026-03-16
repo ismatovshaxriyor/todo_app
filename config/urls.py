@@ -5,6 +5,7 @@ from config.spectacular_view import CustomSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', include('apps.todo.urls')),
 
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("", CustomSwaggerView.as_view(), name="swagger-ui"),
