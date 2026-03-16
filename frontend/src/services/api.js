@@ -84,8 +84,12 @@ export const authService = {
 
 // Todo Service
 export const todoService = {
-  getTodos: async () => {
-    return await apiFetch('/todos/');
+  getTodos: async (page = 1, search = '') => {
+    let url = `/todos/?page=${page}`;
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`;
+    }
+    return await apiFetch(url);
   },
   
   createTodo: async (title, description = '', category_id = null, priority = 'medium', deadline = null) => {
@@ -117,6 +121,10 @@ export const todoService = {
 
   getStatistics: async () => {
     return await apiFetch('/todos/statistics/');
+  },
+  
+  getActivity: async (period = '7d') => {
+    return await apiFetch(`/todos/activity/?period=${period}`);
   }
 };
 

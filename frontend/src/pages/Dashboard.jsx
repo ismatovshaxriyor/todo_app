@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { todoService, categoryService, authService } from '../services/api';
 
@@ -19,27 +19,66 @@ function Dashboard() {
   const [error, setError] = useState('');
   
   const [stats, setStats] = useState(null);
+  
+  // Pagination & Search States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // Only update query on submit/debounce
+  
+  // UI State
+  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [todosData, categoriesData, statsData] = await Promise.all([
-        todoService.getTodos(),
+        todoService.getTodos(currentPage, searchQuery),
         categoryService.getCategories(),
         todoService.getStatistics()
       ]);
-      setTodos(todosData.results || todosData);
-      setCategories(categoriesData.results || categoriesData);
-      setStats(statsData);
+      
+      // Handle Django Pagination Response
+      if (todosData && todosData.results !== undefined) {
+        setTodos(todosData.results);
+        // Math.ceil(total entries / page_size) => 10 is our default set in backend
+        setTotalPages(Math.ceil(todosData.count / 10)); 
+      } else {
+        setTodos(todosData);
+        setTotalPages(1);
+      }
+      
+      // We only want to set categories if they come back successfully
+      if (categoriesData && (categoriesData.results || categoriesData.length >= 0)) {
+        setCategories(categoriesData.results || categoriesData);
+      }
+      
+      if (statsData) setStats(statsData);
+      
     } catch (err) {
       setError('Failed to fetch data.');
     } finally {
       setLoading(false);
     }
+  }, [currentPage, searchQuery]);
+
+  // Initial fetch and dependency fetch
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Handle Search Submission
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setCurrentPage(1); // Reset to first page on new search
+    setSearchQuery(searchInput);
+  };
+  
+  // Clear search
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+    setCurrentPage(1);
   };
 
   const handleAddTodo = async (e) => {
@@ -47,10 +86,9 @@ function Dashboard() {
     if (!newTodoTitle.trim()) return;
 
     try {
-      // Create date format that DRF understands if entered
       const deadlineStr = newTodoDeadline ? new Date(newTodoDeadline).toISOString() : null;
       
-      const newTodo = await todoService.createTodo(
+      await todoService.createTodo(
         newTodoTitle, 
         newTodoDesc, 
         newTodoCategory || null,
@@ -59,16 +97,20 @@ function Dashboard() {
       );
       
       // Update data and refresh stats
-      fetchData();
+      if (currentPage === 1) {
+          fetchData();
+      } else {
+          setCurrentPage(1); // Adding new todo should usually send us back to pg 1
+      }
       
-      // Reset form
+      // Reset form and close panel
       setNewTodoTitle('');
       setNewTodoDesc('');
       setNewTodoCategory('');
       setNewTodoPriority('medium');
       setNewTodoDeadline('');
+      setIsAddPanelOpen(false);
     } catch (err) {
-      // Read DRF validation error if available
       let errorMsg = 'Failed to create task.';
       if (err && err.deadline) {
         errorMsg = `Deadline error: ${err.deadline[0]}`;
@@ -78,7 +120,6 @@ function Dashboard() {
         } catch(_) {}
       }
       setError(errorMsg);
-      // Auto clear error
       setTimeout(() => setError(''), 5000);
     }
   };
@@ -131,36 +172,34 @@ function Dashboard() {
     authService.logout();
   };
 
+  // Filter existing fetched todos by category visually
   const filteredTodos = activeCategory 
     ? todos.filter(t => t.category === activeCategory)
     : todos;
 
-  // Helper to get priority badge color
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'high': return 'rgba(248, 113, 113, 0.2)'; // Red
-      case 'medium': return 'rgba(250, 204, 21, 0.2)'; // Yellow
-      case 'low': return 'rgba(110, 231, 183, 0.2)'; // Green
+      case 'high': return 'rgba(248, 113, 113, 0.2)'; 
+      case 'medium': return 'rgba(250, 204, 21, 0.2)'; 
+      case 'low': return 'rgba(110, 231, 183, 0.2)'; 
       default: return 'var(--surface-secondary)';
     }
   };
 
   const getPriorityTextColor = (priority) => {
     switch (priority) {
-      case 'high': return 'var(--accent-danger)'; // Red
-      case 'medium': return '#fbbf24'; // Yellow
-      case 'low': return 'var(--accent-primary)'; // Green
+      case 'high': return 'var(--accent-danger)'; 
+      case 'medium': return '#fbbf24'; 
+      case 'low': return 'var(--accent-primary)'; 
       default: return 'var(--text-secondary)';
     }
   };
 
-  // Format date helper
   const formatDeadline = (isoString) => {
     if (!isoString) return null;
     const date = new Date(isoString);
     const now = new Date();
     
-    // Simple logic for overdues
     const isOverdue = date < now;
     const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     
@@ -243,133 +282,100 @@ function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2.5rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(10, 10, 15, 0.5)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <header style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2.5rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(10, 10, 15, 0.5)' }}>
           <h2 style={{ margin: 0, fontWeight: 600 }}>
-            {activeCategory ? categories.find(c => c.id === activeCategory)?.title : 'All Tasks'}
+            {activeCategory ? categories.find(c => c.id === activeCategory)?.title : 'Dashboard'}
           </h2>
           
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <Link to="/profile" className="btn btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)' }}>
-              My Profile
+            {/* SEARCH BAR */}
+            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
+              <input 
+                type="text" 
+                placeholder="Search tasks..." 
+                className="glass-input"
+                style={{ padding: '0.4rem 1rem', paddingRight: '2.5rem', fontSize: '0.9rem', width: '250px', borderRadius: 'var(--radius-full)' }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              {searchInput && (
+                 <button type="button" onClick={handleClearSearch} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
+                    ×
+                 </button>
+              )}
+            </form>
+
+            <button 
+              onClick={() => setIsAddPanelOpen(true)}
+              className="btn btn-primary" 
+              style={{ padding: '0.5rem 1.25rem', fontSize: '0.875rem' }}
+            >
+              + New Task
+            </button>
+
+            <Link to="/profile" className="btn btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)', marginLeft: '0.5rem' }}>
+              Profile
             </Link>
           </div>
         </header>
 
-        <main className="main-content" style={{ maxWidth: '1000px', margin: '0 auto', width: '100%', padding: '2.5rem' }}>
-          {error && (
-            <div style={{ padding: '1rem', background: 'rgba(248,113,113,0.1)', color: 'var(--accent-danger)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 'var(--radius-md)', marginBottom: '2rem' }}>
-              {error}
-            </div>
-          )}
+        <main className="main-content" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', maxWidth: '1000px', margin: '0 auto', width: '100%', padding: '2.5rem 2.5rem 0 2.5rem' }}>
+          
+          {/* STATIC TOP PART (Stats + Form) */}
+          <div style={{ flexShrink: 0 }}>
+            {error && (
+              <div style={{ padding: '1rem', background: 'rgba(248,113,113,0.1)', color: 'var(--accent-danger)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 'var(--radius-md)', marginBottom: '2rem' }}>
+                {error}
+              </div>
+            )}
 
-          {/* STATISTICS WIDGETS */}
-          {stats && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-              {/* Total Card */}
-              <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-primary)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Tasks</span>
-                <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.total_tasks || 0}</span>
+            {/* STATISTICS WIDGETS */}
+            {stats && !searchQuery && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-primary)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Tasks</span>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.total_tasks || 0}</span>
+                </div>
+                
+                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #10b981', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Completed</span>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#10b981' }}>{stats.completed_tasks || 0}</span>
+                </div>
+                
+                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #f59e0b', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Pending</span>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.pending_tasks || 0}</span>
+                </div>
+                
+                <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-danger)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Overdue</span>
+                  <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--accent-danger)' }}>{stats.overdue_tasks || 0}</span>
+                </div>
               </div>
-              
-              {/* Completed Card */}
-              <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #10b981', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Completed</span>
-                <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#10b981' }}>{stats.completed_tasks || 0}</span>
-              </div>
-              
-              {/* Pending Card */}
-              <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #f59e0b', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Pending</span>
-                <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.pending_tasks || 0}</span>
-              </div>
-              
-              {/* Overdue Card */}
-              <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-danger)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Overdue</span>
-                <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--accent-danger)' }}>{stats.overdue_tasks || 0}</span>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* ADD TODO FORM */}
-          <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2.5rem' }}>
-            <form onSubmit={handleAddTodo} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              
-              {/* Row 1: Title and Add Button */}
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'stretch' }}>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  placeholder="What needs to be done?" 
-                  value={newTodoTitle} 
-                  onChange={(e) => setNewTodoTitle(e.target.value)}
-                  required
-                  style={{ fontSize: '1.05rem', flex: 1 }}
-                />
-                <button type="submit" className="btn btn-primary" style={{ padding: '0 2rem' }}>
-                  Create Task
-                </button>
-              </div>
-              
-              {/* Row 2: Description */}
-              <div>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  placeholder="Description (optional)" 
-                  value={newTodoDesc} 
-                  onChange={(e) => setNewTodoDesc(e.target.value)}
-                  style={{ width: '100%' }}
-                />
-              </div>
+            {searchQuery && (
+               <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Search results for:</span>
+                  <strong style={{ color: 'var(--accent-primary)' }}>"{searchQuery}"</strong>
+               </div>
+            )}
 
-              {/* Row 3: Advanced Options (Category, Priority, Deadline) */}
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <select 
-                  className="glass-input" 
-                  value={newTodoCategory} 
-                  onChange={(e) => setNewTodoCategory(e.target.value)}
-                  style={{ flex: 1, minWidth: '150px', cursor: 'pointer', appearance: 'none', color: newTodoCategory ? 'var(--text-primary)' : 'var(--text-muted)' }}
-                >
-                  <option value="" style={{ color: '#000' }}>📄 No Category</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id} style={{ color: '#000' }}>{cat.title}</option>
-                  ))}
-                </select>
-
-                <select 
-                  className="glass-input" 
-                  value={newTodoPriority} 
-                  onChange={(e) => setNewTodoPriority(e.target.value)}
-                  style={{ flex: 1, minWidth: '150px', cursor: 'pointer', appearance: 'none' }}
-                >
-                  <option value="low" style={{ color: '#000' }}>🟢 Low Priority</option>
-                  <option value="medium" style={{ color: '#000' }}>🟡 Medium Priority</option>
-                  <option value="high" style={{ color: '#000' }}>🔴 High Priority</option>
-                </select>
-
-                <input 
-                  type="datetime-local" 
-                  className="glass-input" 
-                  value={newTodoDeadline}
-                  onChange={(e) => setNewTodoDeadline(e.target.value)}
-                  style={{ flex: 1.5, minWidth: '200px', cursor: 'pointer', color: newTodoDeadline ? 'var(--text-primary)' : 'var(--text-muted)' }}
-                  title="Due Date & Time"
-                />
-              </div>
-
-            </form>
+            {/* ADD TODO FORM WAS HERE */}
           </div>
 
-          {/* TODOS LIST */}
-          {loading && <div className="text-center" style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading...</div>}
+          {/* SCROLLABLE BOTTOM PART (List + Pagination) */}
+          <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem', paddingBottom: '2.5rem' }} className="todos-scroll-container">
+            {/* TODOS LIST */}
+            {loading && <div className="text-center" style={{ padding: '3rem', color: 'var(--text-muted)' }}>
+               <div style={{ display: 'inline-block', width: '30px', height: '30px', border: '3px solid rgba(110,231,183,0.3)', borderRadius: '50%', borderTopColor: 'var(--accent-primary)', animation: 'spin 1s ease-in-out infinite' }}></div>
+            </div>}
           
           {!loading && filteredTodos.length === 0 && (
             <div className="text-center" style={{ padding: '4rem 2rem', background: 'var(--surface-primary)', borderRadius: 'var(--radius-lg)', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>📝</div>
               <p style={{ fontSize: '1.1rem' }}>No tasks found here.</p>
-              <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>Add a new one to get started.</p>
             </div>
           )}
 
@@ -440,8 +446,156 @@ function Dashboard() {
               );
             })}
           </div>
+
+          {/* PAGINATION CONTROLS */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', marginTop: '3rem', padding: '1rem' }}>
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1 || loading}
+                className="btn btn-secondary"
+                style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+              >
+                ← Previous
+              </button>
+              
+              <span style={{ color: 'var(--text-secondary)' }}>
+                Page <strong style={{ color: 'var(--text-primary)' }}>{currentPage}</strong> of {totalPages}
+              </span>
+              
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages || loading}
+                className="btn btn-secondary"
+                style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+          
+          </div>
         </main>
       </div>
+      
+      {/* Right Side Panel for Adding Task */}
+      {isAddPanelOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40,
+          backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'flex-end', transition: 'all 0.3s'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '400px', height: '100%', borderRadius: 0, borderRight: 0, borderTop: 0, borderBottom: 0,
+            padding: '2.5rem 2rem', display: 'flex', flexDirection: 'column', animation: 'slideInRight 0.3s forwards'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+              <h2 style={{ margin: 0 }}>Create Task</h2>
+              <button onClick={() => setIsAddPanelOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.5rem', padding: '0.5rem' }}>
+                &times;
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddTodo} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
+              <div className="input-group">
+                <label className="input-label">Title</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  placeholder="What needs to be done?" 
+                  value={newTodoTitle} 
+                  onChange={(e) => setNewTodoTitle(e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div className="input-group">
+                <label className="input-label">Description (optional)</label>
+                <textarea 
+                  className="glass-input" 
+                  placeholder="Add details..." 
+                  value={newTodoDesc} 
+                  onChange={(e) => setNewTodoDesc(e.target.value)}
+                  style={{ minHeight: '100px', resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Category</label>
+                <select 
+                  className="glass-input" 
+                  value={newTodoCategory} 
+                  onChange={(e) => setNewTodoCategory(e.target.value)}
+                  style={{ cursor: 'pointer', appearance: 'none', color: newTodoCategory ? 'var(--text-primary)' : 'var(--text-muted)' }}
+                >
+                  <option value="" style={{ color: '#000' }}>📄 No Category</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id} style={{ color: '#000' }}>{cat.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Priority</label>
+                <select 
+                  className="glass-input" 
+                  value={newTodoPriority} 
+                  onChange={(e) => setNewTodoPriority(e.target.value)}
+                  style={{ cursor: 'pointer', appearance: 'none' }}
+                >
+                  <option value="low" style={{ color: '#000' }}>🟢 Low</option>
+                  <option value="medium" style={{ color: '#000' }}>🟡 Medium</option>
+                  <option value="high" style={{ color: '#000' }}>🔴 High</option>
+                </select>
+              </div>
+              
+              <div className="input-group">
+                <label className="input-label">Due Date & Time</label>
+                <input 
+                  type="datetime-local" 
+                  className="glass-input" 
+                  value={newTodoDeadline}
+                  onChange={(e) => setNewTodoDeadline(e.target.value)}
+                  style={{ cursor: 'pointer', color: newTodoDeadline ? 'var(--text-primary)' : 'var(--text-muted)' }}
+                />
+              </div>
+
+              <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '1rem' }}>
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+          
+        /* Custom scrollbar for todos list */
+        .todos-scroll-container::-webkit-scrollbar {
+          width: 8px;
+        }
+        .todos-scroll-container::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+          border-radius: 4px;
+        }
+        .todos-scroll-container::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+        }
+        .todos-scroll-container::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+          
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}} />
     </div>
   );
 }
