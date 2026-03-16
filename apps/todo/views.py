@@ -1,4 +1,7 @@
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from apps.todo.models import Todo, Category
 from apps.todo.serializers import TodoSerializer, CategorySerializer
@@ -30,3 +33,20 @@ class TodoViewSet(ModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        user_todos = self.get_queryset()
+        now = timezone.now()
+
+        total = user_todos.count()
+        completed = user_todos.filter(is_completed=True).count()
+        pending = user_todos.filter(is_completed=False).count()
+        overdue = user_todos.filter(is_completed=False, deadline__lt=now).count()
+
+        return Response({
+            'total_tasks': total,
+            'completed_tasks': completed,
+            'pending_tasks': pending,
+            'overdue_tasks': overdue
+        })

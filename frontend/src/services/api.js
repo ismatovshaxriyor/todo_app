@@ -72,6 +72,13 @@ export const authService = {
 
   getUserProfile: async () => {
     return await apiFetch('/users/me/');
+  },
+  
+  updateUserProfile: async (data) => {
+    return await apiFetch('/users/update_profile/', {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
   }
 };
 
@@ -81,11 +88,13 @@ export const todoService = {
     return await apiFetch('/todos/');
   },
   
-  createTodo: async (title, description = '', category_id = null) => {
-    const body = { title, description };
-    // If the user selects a category, include it
+  createTodo: async (title, description = '', category_id = null, priority = 'medium', deadline = null) => {
+    const body = { title, description, priority };
     if (category_id) {
         body.category = category_id;
+    }
+    if (deadline) {
+        body.deadline = deadline;
     }
     return await apiFetch('/todos/', {
       method: 'POST',
@@ -104,6 +113,10 @@ export const todoService = {
     return await apiFetch(`/todos/${id}/`, {
       method: 'DELETE',
     });
+  },
+
+  getStatistics: async () => {
+    return await apiFetch('/todos/statistics/');
   }
 };
 
